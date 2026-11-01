@@ -55,7 +55,7 @@ import java.util.function.Predicate;
  */
 final class Quarry {
 	enum State {
-		OFF, TAKE, STORE, SWAP_BOX, MEND, TO_PORTAL, IN_PORTAL, ARRIVE, MINE, STEP_OUT, FLOOR, COLLECT, DEPOSIT, RESTOCK, AWAY, KILL, RESPAWN
+		OFF, TAKE, STORE, SWAP_BOX, MEND, TO_PORTAL, IN_PORTAL, ARRIVE, MINE, STEP_OUT, FLOOR, COLLECT, DEPOSIT, RESTOCK, COVER, AWAY, KILL, RESPAWN
 	}
 
 	static State state = State.OFF;
@@ -263,6 +263,7 @@ final class Quarry {
 			case STEP_OUT -> stepOut(client, p, world);
 			case FLOOR -> mineFloor(client, p, world);
 			case RESTOCK -> restock(client, p, world);
+			case COVER -> cover(client, p, world);
 			case COLLECT -> collect(client, p, world);
 			case DEPOSIT -> deposit(client, p, world);
 			case AWAY -> away(client, p, world);
@@ -661,8 +662,42 @@ final class Quarry {
 		recollects = 0;
 		killAnyway = false;
 		log("arrived: portal at {} axis {}, {} upper + {} floor obsidian", portalMin, portalAxis, upper.size(), floor.size());
+		enter(State.COVER);
+	}
+
+	/**
+	 * Lava next to the frame burns the obsidian that drops into it: cover what's in reach with filler first. From
+	 * where we stand, without walking (stepping back into the portal would take us home).
+	 */
+	private static void cover(MinecraftClient client, ClientPlayerEntity p, ClientWorld world) {
+		status = Text.literal("Covering lava by the portal");
+		if (ticks > 60 || count(p.getInventory(), Quarry::filler) <= floor.size()) {
+			enter(State.MINE);
+			return;
+		}
+		if (ticks % 3 != 1) return;
+		double range = p.getBlockInteractionRange() - 0.4;
+		Direction across = portalAxis == Direction.Axis.X ? Direction.SOUTH : Direction.EAST;
+		Direction along = portalAxis == Direction.Axis.X ? Direction.EAST : Direction.SOUTH;
+		for (int y = -2; y <= 4; y++) {
+			for (int a = -3; a <= 4; a++) {
+				for (int c = -2; c <= 2; c++) {
+					BlockPos q = portalMin.offset(along, a).offset(across, c).up(y);
+					if (!world.getFluidState(q).isIn(net.minecraft.registry.tag.FluidTags.LAVA)) continue;
+					if (p.getEyePos().squaredDistanceTo(Vec3d.ofCenter(q)) > range * range) continue;
+					for (Direction d : Direction.values()) {
+						BlockPos n = q.offset(d);
+						// Not a chest: clicking that would open it.
+						if (!world.getBlockState(n).isSolidBlock(world, n) || world.getBlockEntity(n) != null) continue;
+						if (p.getEyePos().squaredDistanceTo(Vec3d.ofCenter(n)) > range * range) continue;
+						log("covering lava at {}", q);
+						placeAgainst(client, p, world, q, n, Quarry::filler);
+						return;
+					}
+				}
+			}
+		}
 		enter(State.MINE);
-		mine(client, p, world);
 	}
 
 	/** The portal blocks joined to {@code start}, and the obsidian around them. */
@@ -815,6 +850,7 @@ final class Quarry {
 
 	/** Everything into the ender chest here. Nothing may be left on us when we die. */
 	private static void deposit(MinecraftClient client, ClientPlayerEntity p, ClientWorld world) {
+		if (ticks == 1) log("banking: {}", carrying(p));
 		status = Text.literal("Banking " + count(p.getInventory(), x -> x.isOf(Items.OBSIDIAN)) + " obsidian");
 		if (homeChestNether == null || !world.getBlockState(homeChestNether).isOf(Blocks.ENDER_CHEST)
 				|| homeChestNether.getSquaredDistance(p.getBlockPos()) > 24 * 24) {
@@ -914,11 +950,15 @@ final class Quarry {
 			enter(State.RESPAWN);
 			return;
 		}
-		if (ticks == 1) {
+		// Empty for half a second first: on a laggy server a move into the chest can be undone after we see it.
+		if (ticks <= 10) {
 			if (!emptyHanded(p)) {
+				log("at /kill, still carrying: {}", carrying(p));
 				enter(State.DEPOSIT);
-				return;
 			}
+			return;
+		}
+		if (ticks == 11) {
 			// A drop in pickup reach would be picked up in the moment before we die and scattered by the death,
 			// maybe into lava. Try for it once more; if it still can't be reached, die out of its reach.
 			if (!killAnyway && nearDrop(world, p) != null) {
@@ -936,7 +976,7 @@ final class Quarry {
 			}
 			p.networkHandler.sendChatCommand(QuarryConfig.INSTANCE.killCommand);
 		}
-		if (ticks > 600) {
+		if (ticks > 610) {
 			stop(client, "/" + QuarryConfig.INSTANCE.killCommand + " didn't kill me. Your things are in the ender chest. Set the server's kill command with "
 					+ "/portalquarry kill <command>.");
 		}
@@ -1309,6 +1349,14 @@ final class Quarry {
 	}
 
 	/** Nothing at all on us: inventory, armour, offhand. */
+	private static String carrying(ClientPlayerEntity p) {
+		StringBuilder b = new StringBuilder();
+		PlayerInventory inv = p.getInventory();
+		for (int i = 0; i < inv.size(); i++) if (!inv.getStack(i).isEmpty()) b.append(i).append('=').append(inv.getStack(i)).append(' ');
+		if (!p.currentScreenHandler.getCursorStack().isEmpty()) b.append("cursor=").append(p.currentScreenHandler.getCursorStack());
+		return b.toString();
+	}
+
 	static boolean emptyHanded(ClientPlayerEntity p) {
 		PlayerInventory inv = p.getInventory();
 		for (int i = 0; i < PlayerInventory.MAIN_SIZE; i++) if (!inv.getStack(i).isEmpty()) return false;

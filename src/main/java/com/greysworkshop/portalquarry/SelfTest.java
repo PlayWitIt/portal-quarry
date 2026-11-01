@@ -96,6 +96,7 @@ final class SelfTest {
 	}
 
 	private static int handSwaps;
+	private static boolean lavaPlaced;
 
 	private static void tick(MinecraftClient client) {
 		if (client.player == null || client.world == null || client.getServer() == null) return;
@@ -140,6 +141,11 @@ final class SelfTest {
 					check("the game built a 2x3 portal in the nether: 14 obsidian (" + Quarry.upper.size() + " + " + Quarry.floor.size() + " floor)",
 							Quarry.upper.size() == 10 && Quarry.floor.size() == 4);
 				}
+				if (Quarry.state == Quarry.State.DEPOSIT && !lavaPlaced) {
+					// A lava pool beside the frame for the next trip: drops that land in it burn.
+					lavaPlaced = true;
+					command(client, "execute in minecraft:the_nether run setblock 3 39 -1 minecraft:lava");
+				}
 				if (Quarry.state == Quarry.State.FLOOR && since % 20 == 0 && !shot1) {
 					shot1 = true;
 					screenshot(client, "1_nether_floor");
@@ -174,6 +180,8 @@ final class SelfTest {
 				}
 				if (Quarry.state == Quarry.State.MINE && Quarry.portalMin != null && !checkedSecond) {
 					checkedSecond = true;
+					check("covered the lava beside the portal before mining",
+							server(client, sv -> sv.getWorld(World.NETHER).getFluidState(new BlockPos(3, 39, -1)).isEmpty() ? 1 : 0) == 1);
 					// Something lands on the nether ender chest: it has to clear it to bank.
 					BlockPos c = Quarry.homeChestNether;
 					command(client, "execute in minecraft:the_nether run setblock " + c.getX() + " " + (c.getY() + 1) + " " + c.getZ() + " minecraft:cobblestone");
