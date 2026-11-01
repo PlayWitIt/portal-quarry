@@ -39,6 +39,7 @@ java {
 // The scripted self-test is for development only.
 jar {
 	exclude 'com/greysworkshop/portalquarry/SelfTest*'
+	exclude 'com/greysworkshop/portalquarry/PracticalTest*'
 }
 
 loom {
@@ -47,6 +48,12 @@ loom {
 			client()
 			name = "Self Test"
 			vmArgs "-Dportalquarry.selftest=true", "-Dportalquarry.debug=true", "-Xmx1536m"
+			runDir "run"
+		}
+		practicalTest {
+			client()
+			name = "Practical Test"
+			vmArgs "-Dportalquarry.practical=true", "-Dportalquarry.debug=true", "-Xmx2g", "-Dportalquarry.minutes=${findProperty('pqMinutes') ?: 20}"
 			runDir "run"
 		}
 	}

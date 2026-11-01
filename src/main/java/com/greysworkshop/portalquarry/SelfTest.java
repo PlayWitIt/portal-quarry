@@ -172,10 +172,15 @@ final class SelfTest {
 				}
 				if (Quarry.state == Quarry.State.MINE && Quarry.portalMin != null && !checkedSecond) {
 					checkedSecond = true;
+					// Something lands on the nether ender chest: it has to clear it to bank.
+					BlockPos c = Quarry.homeChestNether;
+					command(client, "execute in minecraft:the_nether run setblock " + c.getX() + " " + (c.getY() + 1) + " " + c.getZ() + " minecraft:cobblestone");
 					check("the next portal was built in the same place (" + Quarry.portalMin + " vs " + firstPortal + ")", Quarry.portalMin.equals(firstPortal));
 				}
 				if (Quarry.cycles >= 2) {
 					framesMined++;
+					BlockPos c = Quarry.homeChestNether;
+					check("cleared a block off the ender chest to open it", server(client, sv -> sv.getWorld(World.NETHER).getBlockState(c.up()).isAir() ? 1 : 0) == 1);
 					int mined = server(client, s -> player(s).getStatHandler().getStat(Stats.MINED.getOrCreateStat(Blocks.OBSIDIAN)));
 					check("14 obsidian mined each trip (" + mined + " after 2)", mined == 28);
 					next("cycle3");

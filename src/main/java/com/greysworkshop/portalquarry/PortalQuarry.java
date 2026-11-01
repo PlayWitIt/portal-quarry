@@ -29,7 +29,13 @@ public final class PortalQuarry implements ClientModInitializer {
 		HudElementRegistry.addLast(Identifier.of(MOD_ID, "hud"), Hud::render);
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> Commands.register(dispatcher));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> Quarry.stop(client, "Stopped: disconnected.")));
-		if (Boolean.getBoolean("portalquarry.selftest")) {
+		if (Boolean.getBoolean("portalquarry.practical")) {
+			try {
+				Class.forName("com.greysworkshop.portalquarry.PracticalTest").getDeclaredMethod("start").invoke(null);
+			} catch (ReflectiveOperationException e) {
+				LOGGER.error("Practical test missing", e);
+			}
+		} else if (Boolean.getBoolean("portalquarry.selftest")) {
 			try {
 				Class.forName("com.greysworkshop.portalquarry.SelfTest").getDeclaredMethod("start").invoke(null);
 			} catch (ReflectiveOperationException e) {

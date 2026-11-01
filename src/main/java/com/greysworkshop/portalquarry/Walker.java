@@ -54,8 +54,11 @@ final class Walker {
 		return !shape.isEmpty() && shape.getMax(net.minecraft.util.math.Direction.Axis.Y) <= 0.5;
 	}
 
+	/** Magma only stings: allowed when picking things up off it. */
+	static boolean magmaOk;
+
 	private static boolean dangerous(BlockState s) {
-		return s.isOf(Blocks.LAVA) || s.isOf(Blocks.FIRE) || s.isOf(Blocks.SOUL_FIRE) || s.isOf(Blocks.MAGMA_BLOCK)
+		return s.isOf(Blocks.LAVA) || s.isOf(Blocks.FIRE) || s.isOf(Blocks.SOUL_FIRE) || s.isOf(Blocks.MAGMA_BLOCK) && !magmaOk
 				|| s.isOf(Blocks.CACTUS) || s.isOf(Blocks.SWEET_BERRY_BUSH) || s.isOf(Blocks.POWDER_SNOW) || s.isOf(Blocks.COBWEB)
 				|| s.isOf(Blocks.CAMPFIRE) || s.isOf(Blocks.SOUL_CAMPFIRE) || s.isOf(Blocks.WITHER_ROSE) || s.isOf(Blocks.POINTED_DRIPSTONE);
 	}

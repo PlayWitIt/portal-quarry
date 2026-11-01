@@ -208,6 +208,7 @@ final class Quarry {
 
 	private static void enter(State s) {
 		state = s;
+		Walker.magmaOk = false;
 		ticks = 0;
 		wait = 0;
 		tries = 0;
@@ -598,7 +599,8 @@ final class Quarry {
 			return;
 		}
 		status = Text.literal("In the portal");
-		if (ticks > 400) stop(client, "The portal didn't take me to the nether.");
+		// Generous: the first trip makes the server generate the nether, and a laggy server can take a long time.
+		if (ticks > 2400) stop(client, "The portal didn't take me to the nether in 2 minutes.");
 	}
 
 	// ---- in the nether
@@ -606,7 +608,7 @@ final class Quarry {
 	private static void arrive(MinecraftClient client, ClientPlayerEntity p, ClientWorld world) {
 		status = Text.literal("Arrived");
 		if (world.getRegistryKey() != World.NETHER) {
-			if (ticks > 300) stop(client, "Expected to be in the nether.");
+			if (ticks > 1200) stop(client, "Expected to be in the nether.");
 			return;
 		}
 		BlockPos feet = Walker.feet(p);
@@ -619,7 +621,7 @@ final class Quarry {
 			}
 		}
 		if (start == null) {
-			if (ticks > 400) {
+			if (ticks > 1200) {
 				// Nothing to mine (someone broke it?). Still bank and go home.
 				log("no portal where I arrived at {}", feet);
 				enter(State.COLLECT);
@@ -763,8 +765,17 @@ final class Quarry {
 	private static void collect(MinecraftClient client, ClientPlayerEntity p, ClientWorld world) {
 		status = Text.literal("Picking up");
 		if (ticks < 12) return; // a drop can't be picked up for its first half second
-		ItemEntity drop = nearestDrop(world, p, 6, x -> x.isOf(Items.OBSIDIAN) || filler(x));
-		if (drop == null || ticks > 160) {
+		ItemEntity drop = nearestDrop(world, p, 8, x -> x.isOf(Items.OBSIDIAN) || filler(x));
+		Walker.magmaOk = true;
+		if (drop == null || ticks > 200) {
+			Walker.magmaOk = false;
+			if (Boolean.getBoolean("portalquarry.debug")) {
+				for (ItemEntity e : world.getEntitiesByClass(ItemEntity.class, p.getBoundingBox().expand(16, 16, 16), e -> e.getStack().isOf(Items.OBSIDIAN))) {
+					log("left behind: {} obsidian at {} (in {}, on {}), {} blocks away, age {}", e.getStack().getCount(), e.getBlockPos(),
+							world.getBlockState(e.getBlockPos()).getBlock(), world.getBlockState(e.getBlockPos().down()).getBlock(),
+							String.format("%.1f", e.distanceTo(p)), e.getItemAge());
+				}
+			}
 			walker.stop(client);
 			enter(State.DEPOSIT);
 			return;
@@ -878,9 +889,14 @@ final class Quarry {
 				enter(State.DEPOSIT);
 				return;
 			}
+			if (Boolean.getBoolean("portalquarry.debug")) {
+				for (ItemEntity e : world.getEntitiesByClass(ItemEntity.class, p.getBoundingBox().expand(3, 2, 3), e -> true)) {
+					log("at /kill, a drop near me: {} x{} at {}", e.getStack().getItem(), e.getStack().getCount(), e.getBlockPos());
+				}
+			}
 			p.networkHandler.sendChatCommand(QuarryConfig.INSTANCE.killCommand);
 		}
-		if (ticks > 300) {
+		if (ticks > 600) {
 			stop(client, "/" + QuarryConfig.INSTANCE.killCommand + " didn't kill me. Your things are in the ender chest. Set the server's kill command with "
 					+ "/portalquarry kill <command>.");
 		}
@@ -897,11 +913,11 @@ final class Quarry {
 		}
 		if (p.isDead()) {
 			if (ticks > 60 && ticks % 40 == 0) p.requestRespawn();
-			if (ticks > 600) stop(client, "Couldn't respawn.");
+			if (ticks > 2400) stop(client, "Couldn't respawn.");
 			return;
 		}
 		if (world.getRegistryKey() != World.OVERWORLD) {
-			if (ticks > 600) stop(client, "Respawned in the nether, not at the bed.");
+			if (ticks > 2400) stop(client, "Respawned in the nether, not at the bed.");
 			return;
 		}
 		BlockPos feet = p.getBlockPos();
@@ -930,6 +946,20 @@ final class Quarry {
 			return false;
 		}
 		if (opened != null && opened.equals(pos) && ++openWait < 60) return false;
+		// Crouching would place the held block on the container instead of opening it.
+		client.options.sneakKey.setPressed(false);
+		if (p.isSneaking()) return false;
+		// A solid block on top stops a chest opening: mine it off.
+		BlockPos above = pos.up();
+		BlockState top = client.world.getBlockState(above);
+		BlockState self = client.world.getBlockState(pos);
+		if ((self.isOf(Blocks.ENDER_CHEST) || self.getBlock() instanceof ChestBlock) && top.isSolidBlock(client.world, above)
+				&& !top.isOf(Blocks.BEDROCK) && !top.isOf(Blocks.NETHER_PORTAL)) {
+			log("clearing {} off the top of {}", top.getBlock(), pos);
+			breakBlock(client, p, client.world, above);
+			return false;
+		}
+		holdPick(client, p);
 		if (++openTries > 6) {
 			openTries = 0;
 			stop(client, "Couldn't open " + what + " at " + pos.toShortString() + ". Is something on top of it?");
@@ -1202,7 +1232,7 @@ final class Quarry {
 	}
 
 	private static ItemEntity nearestDrop(ClientWorld world, ClientPlayerEntity p, double r, Predicate<ItemStack> what) {
-		Box near = p.getBoundingBox().expand(r, 3, r);
+		Box near = p.getBoundingBox().expand(r, 5, r);
 		return world.getEntitiesByClass(ItemEntity.class, near, e -> what.test(e.getStack())).stream()
 				.min(Comparator.comparingDouble(e -> e.squaredDistanceTo(p))).orElse(null);
 	}
