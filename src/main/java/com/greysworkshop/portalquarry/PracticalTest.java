@@ -229,7 +229,7 @@ final class PracticalTest {
 		for (int i = 10; i < 13; i++) command(client, "item replace block " + a + " container." + i + " with minecraft:experience_bottle 64");
 		command(client, "clear @p");
 		command(client, "item replace entity @p enderchest.0 with minecraft:cobblestone 64");
-		command(client, "item replace entity @p enderchest.1 with minecraft:cobblestone 64");
+		for (int i = 13; i < 16; i++) command(client, "item replace block " + a + " container." + i + " with minecraft:cobblestone 64");
 		command(client, "give @p minecraft:netherite_pickaxe[minecraft:enchantments={\"minecraft:efficiency\":5,\"minecraft:unbreaking\":3,\"minecraft:mending\":1}]");
 		command(client, "give @p minecraft:ender_chest 1");
 		command(client, "tp @p " + (x + 0.5) + " " + y + " " + (z + 0.5) + " 180 0");

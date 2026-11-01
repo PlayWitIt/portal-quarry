@@ -197,6 +197,13 @@ final class SelfTest {
 					check("cleared a block off the ender chest to open it", server(client, sv -> sv.getWorld(World.NETHER).getBlockState(c.up()).isAir() ? 1 : 0) == 1);
 					int mined = server(client, s -> player(s).getStatHandler().getStat(Stats.MINED.getOrCreateStat(Blocks.OBSIDIAN)));
 					check("14 obsidian mined each trip (" + mined + " after 2)", mined == 28);
+					int left = server(client, s -> {
+						var inv = s.getOverworld().getBlockEntity(new BlockPos(-2, -60, 4)) instanceof net.minecraft.inventory.Inventory i ? i : null;
+						int n = 0;
+						if (inv != null) for (int k = 0; k < inv.size(); k++) if (inv.getStack(k).isOf(Items.COBBLESTONE)) n += inv.getStack(k).getCount();
+						return n;
+					});
+					check("topped up cobblestone from the chest when the ender chest ran low (" + left + " left of 64)", left < 64);
 					next("cycle3");
 				}
 				if (failIfStopped(client) || since > 3600) fail(client, "cycle 2 didn't finish (" + Quarry.status.getString() + ")");
@@ -205,7 +212,10 @@ final class SelfTest {
 				if (Quarry.state == Quarry.State.MINE && Quarry.portalMin != null && !checkedThird) {
 					checkedThird = true;
 					check("and again on the third trip (" + Quarry.portalMin + ")", Quarry.portalMin.equals(firstPortal));
-					// Health drops while mining: it should bank, die and stop at the bed.
+				}
+				// Health drops while mining: it should bank, die and stop at the bed. (Retried: just after a portal
+				// the player can't be hurt.)
+				if (checkedThird && Quarry.state == Quarry.State.MINE && since % 20 == 0 && client.player.getHealth() > 10) {
 					command(client, "damage @p 15 minecraft:generic");
 					screenshot(client, "2_nether_mining");
 				}
@@ -324,7 +334,8 @@ final class SelfTest {
 		command(client, "item replace block -2 -60 4 container.10 with minecraft:experience_bottle 64");
 		command(client, "item replace block -2 -60 4 container.11 with minecraft:experience_bottle 64");
 		command(client, "clear @p");
-		command(client, "item replace entity @p enderchest.0 with minecraft:cobblestone 64");
+		command(client, "item replace entity @p enderchest.0 with minecraft:cobblestone 6"); // few: it has to get more from the chest
+		command(client, "item replace block -2 -60 4 container.12 with minecraft:cobblestone 64");
 		command(client, "give @p minecraft:netherite_pickaxe[minecraft:enchantments={\"minecraft:efficiency\":5,\"minecraft:mending\":1}]");
 		command(client, "give @p minecraft:ender_chest 1");
 		// The nether: solid netherrack, with an empty room at y 40-50 for the portal.

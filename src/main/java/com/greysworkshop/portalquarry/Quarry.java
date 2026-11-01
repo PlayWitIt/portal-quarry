@@ -55,7 +55,7 @@ import java.util.function.Predicate;
  */
 final class Quarry {
 	enum State {
-		OFF, TAKE, STORE, SWAP_BOX, MEND, TO_PORTAL, IN_PORTAL, ARRIVE, MINE, STEP_OUT, FLOOR, COLLECT, DEPOSIT, KILL, RESPAWN
+		OFF, TAKE, STORE, SWAP_BOX, MEND, TO_PORTAL, IN_PORTAL, ARRIVE, MINE, STEP_OUT, FLOOR, COLLECT, DEPOSIT, RESTOCK, AWAY, KILL, RESPAWN
 	}
 
 	static State state = State.OFF;
@@ -262,8 +262,10 @@ final class Quarry {
 			case MINE -> mine(client, p, world);
 			case STEP_OUT -> stepOut(client, p, world);
 			case FLOOR -> mineFloor(client, p, world);
+			case RESTOCK -> restock(client, p, world);
 			case COLLECT -> collect(client, p, world);
 			case DEPOSIT -> deposit(client, p, world);
+			case AWAY -> away(client, p, world);
 			case KILL -> kill(client, p, world);
 			case RESPAWN -> respawn(client, p, world);
 			default -> {}
@@ -308,7 +310,7 @@ final class Quarry {
 			if (st.isEmpty()) continue;
 			boolean want = st.isOf(Items.OBSIDIAN)
 					|| isPick(st) && (any == null || carried == null && usable(st, QuarryConfig.INSTANCE.minDurability))
-					|| filler(st) && count(p.getInventory(), Quarry::filler) == 0
+					|| filler(st) && count(p.getInventory(), Quarry::filler) < FILLER_LOW
 					|| st.isOf(Items.EXPERIENCE_BOTTLE) && needMend && count(p.getInventory(), x -> x.isOf(Items.EXPERIENCE_BOTTLE)) < 64;
 			if (want && hasRoom(p.getInventory(), st)) {
 				quickMove(client, p, h, s);
@@ -325,11 +327,37 @@ final class Quarry {
 		enter(State.STORE);
 	}
 
+	/** Each trip uses 4 filler (the next portal turns the filled holes into its floor): top up when below this. */
+	private static final int FILLER_LOW = 16;
+
+	/** Filler from the chests, when the ender chest has run out of it. */
+	private static void restock(MinecraftClient client, ClientPlayerEntity p, ClientWorld world) {
+		status = Text.literal("Getting cobblestone from the chests");
+		PlayerInventory inv = p.getInventory();
+		if (count(inv, Quarry::filler) >= FILLER_LOW || chestIndex >= storage.size()) {
+			if (p.currentScreenHandler != p.playerScreenHandler) p.closeHandledScreen();
+			enter(State.MEND);
+			return;
+		}
+		if (!open(client, p, storage.get(chestIndex), "the chest")) return;
+		ScreenHandler h = p.currentScreenHandler;
+		for (Slot s : containerSlots(h, p)) {
+			if (filler(s.getStack()) && hasRoom(inv, s.getStack())) {
+				quickMove(client, p, h, s);
+				return;
+			}
+		}
+		if (++clicks < 3) return;
+		p.closeHandledScreen();
+		chestIndex++;
+		opened = null;
+	}
+
 	/** Obsidian into the shulker box (or the chests). */
 	private static void store(MinecraftClient client, ClientPlayerEntity p, ClientWorld world) {
 		if (count(p.getInventory(), x -> x.isOf(Items.OBSIDIAN)) == 0) {
 			if (p.currentScreenHandler != p.playerScreenHandler) p.closeHandledScreen();
-			enter(State.MEND);
+			enter(count(p.getInventory(), Quarry::filler) < FILLER_LOW ? State.RESTOCK : State.MEND);
 			return;
 		}
 		BlockPos target = box != null ? box : storage.get(Math.min(tries, storage.size() - 1));
@@ -630,6 +658,8 @@ final class Quarry {
 		}
 		findFrame(world, start);
 		minedThisCycle = 0;
+		recollects = 0;
+		killAnyway = false;
 		log("arrived: portal at {} axis {}, {} upper + {} floor obsidian", portalMin, portalAxis, upper.size(), floor.size());
 		enter(State.MINE);
 		mine(client, p, world);
@@ -695,8 +725,8 @@ final class Quarry {
 		if (count(p.getInventory(), Quarry::filler) < floor.size()) {
 			if (!warnedNoFiller) {
 				warnedNoFiller = true;
-				chat(p, Text.literal("No filler blocks, so I'm leaving the portal's floor (10 obsidian a cycle, not 14). "
-						+ "Put cobblestone or netherrack in your ender chest for the full 14.").formatted(Formatting.YELLOW));
+				chat(p, Text.literal("Out of filler blocks, so I'm leaving the portal's floor (10 obsidian a trip, not 14). Each trip "
+						+ "uses 4: put cobblestone or netherrack in your chests or ender chest for the full 14.").formatted(Formatting.YELLOW));
 			}
 			enter(State.COLLECT);
 			return;
@@ -889,6 +919,16 @@ final class Quarry {
 				enter(State.DEPOSIT);
 				return;
 			}
+			// A drop in pickup reach would be picked up in the moment before we die and scattered by the death,
+			// maybe into lava. Try for it once more; if it still can't be reached, die out of its reach.
+			if (!killAnyway && nearDrop(world, p) != null) {
+				if (recollects++ < 1) {
+					enter(State.COLLECT);
+				} else {
+					enter(State.AWAY);
+				}
+				return;
+			}
 			if (Boolean.getBoolean("portalquarry.debug")) {
 				for (ItemEntity e : world.getEntitiesByClass(ItemEntity.class, p.getBoundingBox().expand(3, 2, 3), e -> true)) {
 					log("at /kill, a drop near me: {} x{} at {}", e.getStack().getItem(), e.getStack().getCount(), e.getBlockPos());
@@ -901,6 +941,47 @@ final class Quarry {
 					+ "/portalquarry kill <command>.");
 		}
 	}
+
+	private static int recollects;
+
+	/** One of our drops near enough to be picked up during the /kill. */
+	private static ItemEntity nearDrop(ClientWorld world, ClientPlayerEntity p) {
+		Box reach = p.getBoundingBox().expand(2.5, 1.5, 2.5);
+		return world.getEntitiesByClass(ItemEntity.class, reach, e -> e.getStack().isOf(Items.OBSIDIAN) || filler(e.getStack()))
+				.stream().findAny().orElse(null);
+	}
+
+	/** Walks to somewhere no drop can be picked up from, then dies there. */
+	private static void away(MinecraftClient client, ClientPlayerEntity p, ClientWorld world) {
+		status = Text.literal("Stepping away from a drop I can't reach");
+		if (nearDrop(world, p) == null && p.isOnGround()) {
+			walker.stop(client);
+			enter(State.KILL);
+			return;
+		}
+		if (walkingTo == null) {
+			List<ItemEntity> drops = world.getEntitiesByClass(ItemEntity.class, p.getBoundingBox().expand(10, 6, 10),
+					e -> e.getStack().isOf(Items.OBSIDIAN) || filler(e.getStack()));
+			Predicate<BlockPos> clear = c -> !inPortalSpace(c) && drops.stream().allMatch(e -> {
+				double dx = Math.abs(e.getX() - (c.getX() + 0.5)), dz = Math.abs(e.getZ() - (c.getZ() + 0.5)), dy = e.getY() - c.getY();
+				return Math.max(dx, dz) > 3.5 || dy > 4 || dy < -3;
+			});
+			BlockPos feet = Walker.feet(p);
+			if (++tries > 3 || !walker.plan(world, p, clear, bounds(feet, 8, 3))) {
+				// Nowhere better: die here; the drop stays put for the next trip.
+				log("nowhere out of a drop's reach: dying here");
+				walker.stop(client);
+				recollects = 99;
+				killAnyway = true;
+				enter(State.KILL);
+				return;
+			}
+			walkingTo = feet;
+		}
+		if (!walker.tick(client) || walker.arrived()) walkingTo = null;
+	}
+
+	private static boolean killAnyway;
 
 	private static void respawn(MinecraftClient client, ClientPlayerEntity p, ClientWorld world) {
 		status = Text.literal("Respawning");
