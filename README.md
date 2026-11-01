@@ -24,7 +24,8 @@ By **PlayWit Creations**.
   its spot. (No shulker box? It fills the chests instead.)
 - **XP bottles** in a chest or your ender chest, if your pickaxe has Mending.
 
-**In your ender chest:** a stack of **cobblestone or netherrack** (filler; see below). Your **pickaxe** can be in
+**Cobblestone or netherrack** (filler; see below), in your ender chest or the chests: each trip uses 4, so a double
+chest of it lasts about 12 hours. The mod tops up from the chests when it runs low. Your **pickaxe** can be in
 your inventory or the ender chest: diamond or netherite, Efficiency V is best.
 
 **Carry one extra ender chest** the first time: the mod puts it down in the nether, out of the new portal's way.
@@ -42,7 +43,7 @@ Each cycle:
 1. At the bed: takes the pickaxe, filler and obsidian out of the ender chest, puts the obsidian in the shulker box
    (swapping in an empty box when it's full), and mends the pickaxe if it needs it.
 2. Walks into the portal.
-3. In the nether: mines the 10 frame blocks around it, steps out, mines the 4 floor blocks and fills each hole with
+3. In the nether: covers any lava next to the portal (so drops don't burn), mines the 10 frame blocks around it, steps out, mines the 4 floor blocks and fills each hole with
    filler, so the game builds the next portal **in the same place**. (Without filler it leaves the floor, 10 a
    cycle, so the portal doesn't wander.)
 4. Picks everything up, puts all of it in the ender chest there, and runs `/kill`.
@@ -55,7 +56,7 @@ Each cycle:
 - **Players.** Another player within 48 blocks stops it. In the nether it banks what it has and dies first, so you
   stop at your bed with nothing to lose.
 - **Low health** works the same way.
-- It won't `/kill` with anything in your inventory. If the ender chest is full, or the kill command doesn't work,
+- It won't `/kill` with anything in your inventory, or with a drop close enough to be picked up as it dies. If the ender chest is full, or the kill command doesn't work,
   it stops with everything banked.
 - Respawned somewhere other than the bed? It stops.
 
