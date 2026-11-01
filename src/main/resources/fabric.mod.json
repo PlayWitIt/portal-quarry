@@ -7,6 +7,10 @@
 	"authors": [
 		"PlayWit Creations"
 	],
+	"contact": {
+		"sources": "https://github.com/PlayWitIt/portal-quarry",
+		"issues": "https://github.com/PlayWitIt/portal-quarry/issues"
+	},
 	"license": "MIT",
 	"environment": "client",
 	"entrypoints": {
