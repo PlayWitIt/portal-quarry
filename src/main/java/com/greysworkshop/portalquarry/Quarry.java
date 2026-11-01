@@ -1009,8 +1009,13 @@ final class Quarry {
 			return;
 		}
 		if (walkingTo == null || !walkingTo.equals(cell) || walker.arrived()) {
-			Predicate<BlockPos> goal = c -> c.getX() == cell.getX() && c.getZ() == cell.getZ() && Math.abs(c.getY() - cell.getY()) <= 1;
-			if (!walker.plan(world, p, goal, bounds(cell, 8, 4))) {
+			Predicate<BlockPos> onto = c -> c.getX() == cell.getX() && c.getZ() == cell.getZ() && Math.abs(c.getY() - cell.getY()) <= 1;
+			// Can't stand on it (on lava, a ledge)? Right beside it: the pickup box reaches about a block out.
+			Predicate<BlockPos> beside = c -> Math.abs(c.getX() - cell.getX()) + Math.abs(c.getZ() - cell.getZ()) == 1
+					&& Math.abs(c.getY() - cell.getY()) <= 1;
+			boolean planned = walker.plan(world, p, onto, bounds(cell, 8, 4));
+			if (!planned) planned = walker.plan(world, p, beside, bounds(cell, 8, 4));
+			if (!planned) {
 				// Out of reach: wait for it (or for the collect timeout).
 				walkingTo = null;
 				return;
@@ -1031,8 +1036,13 @@ final class Quarry {
 		if (!reach(client, p, world, pos)) return false;
 		Direction face = Direction.getFacing(p.getEyePos().subtract(Vec3d.ofCenter(pos)));
 		look(p, Vec3d.ofCenter(pos).add(Vec3d.of(face.getVector()).multiply(0.5)));
+		// The pickaxe must be in hand every tick, not just at the start: anything that changes the held item
+		// mid-break (placing filler, a pickup into the hotbar) would otherwise leave us mining obsidian by hand.
+		if (!holdPick(client, p)) {
+			if (++breakTicks > 400) stop(client, "No pickaxe to mine with.");
+			return false;
+		}
 		if (!pos.equals(breaking)) {
-			holdPick(client, p);
 			client.interactionManager.attackBlock(pos, face);
 			breaking = pos;
 			breakTicks = 0;
@@ -1051,10 +1061,21 @@ final class Quarry {
 		return false;
 	}
 
-	private static void holdPick(MinecraftClient client, ClientPlayerEntity p) {
-		ItemStack pick = bestPick(p.getInventory(), 5);
-		if (pick == null) return;
-		select(client, p, indexOf(p.getInventory(), pick));
+	/** Puts the best pickaxe in the main hand. True once it's there. */
+	private static boolean holdPick(MinecraftClient client, ClientPlayerEntity p) {
+		PlayerInventory inv = p.getInventory();
+		ItemStack pick = bestPick(inv, 5);
+		if (pick == null) {
+			// Left in the offhand (by mending, say)? Swap it back to the hotbar.
+			if (usable(p.getOffHandStack(), 5) && p.currentScreenHandler == p.playerScreenHandler) {
+				client.interactionManager.clickSlot(p.playerScreenHandler.syncId, invToScreenSlot(inv.getSelectedSlot()), 40, SlotActionType.SWAP, p);
+			}
+			return false;
+		}
+		if (p.getMainHandStack() == pick) return true;
+		if (p.currentScreenHandler != p.playerScreenHandler) return false;
+		select(client, p, indexOf(inv, pick));
+		return p.getMainHandStack() == pick;
 	}
 
 	/** Places a block into {@code cell}, against the block under it. */

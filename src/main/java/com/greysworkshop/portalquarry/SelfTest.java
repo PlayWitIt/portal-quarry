@@ -95,6 +95,8 @@ final class SelfTest {
 		}
 	}
 
+	private static int handSwaps;
+
 	private static void tick(MinecraftClient client) {
 		if (client.player == null || client.world == null || client.getServer() == null) return;
 		tick++;
@@ -177,7 +179,19 @@ final class SelfTest {
 					command(client, "execute in minecraft:the_nether run setblock " + c.getX() + " " + (c.getY() + 1) + " " + c.getZ() + " minecraft:cobblestone");
 					check("the next portal was built in the same place (" + Quarry.portalMin + " vs " + firstPortal + ")", Quarry.portalMin.equals(firstPortal));
 				}
+				// Something else ends up in hand mid-break (the bug a player saw: mining obsidian by hand).
+				if ((Quarry.state == Quarry.State.MINE || Quarry.state == Quarry.State.FLOOR) && since % 15 == 0) {
+					var inv = client.player.getInventory();
+					for (int i = 0; i < 9; i++) {
+						if (!Quarry.isPick(inv.getStack(i))) {
+							inv.setSelectedSlot(i);
+							handSwaps++;
+							break;
+						}
+					}
+				}
 				if (Quarry.cycles >= 2) {
+					check("kept mining with the pickaxe though the held item was changed " + handSwaps + " times", handSwaps > 0);
 					framesMined++;
 					BlockPos c = Quarry.homeChestNether;
 					check("cleared a block off the ender chest to open it", server(client, sv -> sv.getWorld(World.NETHER).getBlockState(c.up()).isAir() ? 1 : 0) == 1);
