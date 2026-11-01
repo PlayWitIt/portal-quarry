@@ -1,0 +1,24 @@
+{
+	"schemaVersion": 1,
+	"id": "portalquarry",
+	"version": "${version}",
+	"name": "Portal Quarry",
+	"description": "Farms obsidian from the nether portals the game builds for you: walk in, mine the new frame, bank it in your ender chest, /kill, respawn at your bed, store it in shulker boxes, repeat. Mends the pickaxe with XP bottles and stops before it can break. Client-side only.",
+	"authors": [
+		"PlayWit Creations"
+	],
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.greysworkshop.portalquarry.PortalQuarry"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.18.0",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"icon": "assets/portalquarry/icon.png"
+}
