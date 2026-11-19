@@ -1227,6 +1227,8 @@ final class Quarry {
 		if (slot < 0) return;
 		if (slot < PlayerInventory.getHotbarSize()) {
 			inv.setSelectedSlot(slot);
+			// Before the block is hit: one that breaks at once would otherwise go with the old item.
+			((com.greysworkshop.portalquarry.mixin.SlotSync) client.interactionManager).portalquarry$syncSelectedSlot();
 			return;
 		}
 		int hotbar = inv.getSelectedSlot();

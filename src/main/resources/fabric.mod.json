@@ -24,5 +24,6 @@
 		"java": ">=21",
 		"fabric-api": "*"
 	},
-	"icon": "assets/portalquarry/icon.png"
+	"icon": "assets/portalquarry/icon.png",
+	"mixins": ["portalquarry.mixins.json"]
 }

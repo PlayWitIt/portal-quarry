@@ -1,0 +1,7 @@
+{
+	"required": true,
+	"package": "com.greysworkshop.portalquarry.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": ["SlotSync"],
+	"injectors": {"defaultRequire": 1}
+}
